@@ -221,7 +221,7 @@ def extract_and_scan_apk(apk_path):
     extracted_dir = os.path.join("/tmp", "extracted", apk_name)
     os.makedirs(extracted_dir, exist_ok=True)
     try:
-        subprocess.check_output(["unzip", f'"{local_apk_path}"', "-d", f'"{extracted_dir}"'], stderr=subprocess.DEVNULL, shell=True)
+        subprocess.check_output(["unzip", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
         print(f"{Fore.RED}[-] Failed to extract APK: {local_apk_path}{Style.RESET_ALL}")
         return
