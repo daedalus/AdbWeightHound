@@ -13,7 +13,7 @@ ML_MODEL_EXTENSIONS = [
     ".tflite", ".onnx", ".pt", ".pth", ".pb", ".h5", ".caffemodel",
     ".weights", ".mlmodel", ".gguf", ".safetensors"
 ]
-APK_EXTENSIONS = [".apk"]
+APK_EXTENSIONS = [".apk",".xapk",".zip",".jar"]
 
 FOUND = set()  # Set to store found files and avoid duplicates
 
@@ -184,9 +184,9 @@ def scan_files(files, local = False):
                 print(f"{Fore.GREEN}[+] Found possible ML Model: {file} ({human_readable_size(size)}) [Type: {model_type}]{Style.RESET_ALL}")
                 FOUND.add(file)
         elif any(file.lower().endswith(ext) for ext in APK_EXTENSIONS):
-            extract_and_scan_apk(file)
+            extract_and_scan_apk(file, local = local)
 
-def extract_and_scan_apk(apk_path):
+def extract_and_scan_apk(apk_path, local = False):
     """
     Pull an APK from the device to a temporary directory (if necessary), extract it, and search for ML models.
 
@@ -199,29 +199,37 @@ def extract_and_scan_apk(apk_path):
     apk_name = os.path.basename(apk_path)
     local_apk_path = os.path.join("/tmp", apk_name)
 
+    local_md5 = None
+    remote_md5 = None
     # Get the MD5 hash of the remote APK
-    remote_md5 = get_remote_md5(apk_path)
-    if not remote_md5:
-        print(f"{Fore.RED}[-] Failed to calculate MD5 for remote APK: {apk_path}{Style.RESET_ALL}")
-        return
 
-    # Get the MD5 hash of the local APK (if it exists)
-    local_md5 = calculate_md5(local_apk_path)
-
-    # Compare MD5 hashes
-    if local_md5 and local_md5 == remote_md5:
-        print(f"{Fore.YELLOW}[*] APK already exists in /tmp/ with matching MD5. Skipping pull.{Style.RESET_ALL}")
-    else:
-        print(f"{Fore.BLUE}[*] Pulling APK to /tmp/...{Style.RESET_ALL}")
-        if not adb_pull(apk_path, local_apk_path):
-            print(f"{Fore.RED}[-] Failed to pull APK: {apk_path}{Style.RESET_ALL}")
+    if not local:
+        remote_md5 = get_remote_md5(apk_path)
+        if not remote_md5:
+            print(f"{Fore.RED}[-] Failed to calculate MD5 for remote APK: {apk_path}{Style.RESET_ALL}")
             return
 
+        # Get the MD5 hash of the local APK (if it exists)
+        local_md5 = calculate_md5(local_apk_path)
+
+
+        if local_md5 and local_md5 == remote_md5:
+            print(f"{Fore.YELLOW}[*] APK already exists in /tmp/ with matching MD5. Skipping pull.{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.BLUE}[*] Pulling APK to /tmp/...{Style.RESET_ALL}")
+            if not adb_pull(apk_path, local_apk_path):
+                print(f"{Fore.RED}[-] Failed to pull APK: {apk_path}{Style.RESET_ALL}")
+                return
+
+    print(f"{Fore.BLUE}[*] Extracting APK: remote: {apk_path} local: {local_apk_path} {Style.RESET_ALL}")  
+  
     # Extract the APK
     extracted_dir = os.path.join("/tmp", "extracted", apk_name)
     os.makedirs(extracted_dir, exist_ok=True)
     try:
-        subprocess.check_output(["unzip", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL)
+        subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True)
+        #print(subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True))
+
     except subprocess.CalledProcessError:
         print(f"{Fore.RED}[-] Failed to extract APK: {local_apk_path}{Style.RESET_ALL}")
         return
@@ -279,6 +287,18 @@ def main():
     else:
         # Otherwise, search for ML models in predefined directories
         find_ml_models()
+
+    
+    if len(FOUND) > 0:
+        print(f"\n{Fore.BLUE}[*] Summary:{Style.RESET_ALL}")
+        D = set()
+        for mlfile in FOUND:
+            md5 = calculate_md5(mlfile)   
+            if md5 not in D: D[md5] = set()
+            D[md5].add(mlfile)
+        for md5 in D.keys():
+            for mlfile in D[md5]:
+                print(f"   {Fore.CYAN} Found possible ML Model: [{mlfile}]. {Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
