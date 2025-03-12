@@ -1,3 +1,7 @@
+#!/usr/bin/python3
+# Author Dario Clavijo 2025
+# License GPLv3.
+
 import subprocess
 import os
 import tempfile
@@ -291,7 +295,7 @@ def main():
     
     if len(FOUND) > 0:
         print(f"\n{Fore.BLUE}[*] Summary:{Style.RESET_ALL}")
-        D = set()
+        D = dict()
         for mlfile in FOUND:
             md5 = calculate_md5(mlfile)   
             if md5 not in D: D[md5] = set()
