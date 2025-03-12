@@ -14,10 +14,12 @@ init(autoreset=True)
 
 # Updated ML model weight file extensions
 ML_MODEL_EXTENSIONS = [
-    ".tflite", ".onnx", ".pt", ".pth", ".pb", ".h5", ".caffemodel",
+    ".tflite", ".onnx", ".pt", ".pth", ".pb", ".h5",".hdf5", ".caffemodel",
     ".weights", ".mlmodel", ".gguf", ".safetensors"
 ]
-APK_EXTENSIONS = [".apk",".xapk",".zip",".jar"]
+APK_EXTENSIONS = [".apk"]
+#APK_EXTENSIONS = [".apk",".xapk",".zip",".jar",".exe",".msi"]
+
 TMPBASEDIR = "./tmp"
 MODELSDIR = "./models_found" 
 
@@ -46,7 +48,7 @@ ML_MODEL_SIGNATURES = {
 }
 
 def local_shell(command):
-    return subprocess.check_output(command.split(" "), stderr=subprocess.DEVNULL, universal_newlines=True)
+    return subprocess.check_output(command, stderr=subprocess.DEVNULL, universal_newlines=True)
 
 def adb_shell(command):
     """
@@ -145,8 +147,10 @@ def get_file_size(file_path):
         str: The human-readable size of the file (e.g., "1.23 MB").
              Returns "Unknown" if the size cannot be determined.
     """
-    size_output = adb_shell(["stat", "-c%s", f'"{file_path}"'])
-    return int(size_output)
+    #size_output = adb_shell(["stat", "-c%s", f'"{file_path}"'])
+    #print(size_output)
+    #return int(size_output)
+    return os.stat(file_path).st_size
 
 def get_file_signature(file_path, local=False):
     """
@@ -162,7 +166,7 @@ def get_file_signature(file_path, local=False):
     if not local:
         signature_bytes = bytes.fromhex(adb_shell(["xxd","-l 8","-p",file_path]))
     else:
-        result = local_shell(f"xxd -l8 -p {file_path}")
+        result = local_shell(["xxd", "-l 8", "-p", file_path])
         signature_bytes = bytes.fromhex(result)
  
     # Identify file type
@@ -187,8 +191,9 @@ def scan_files(files, local = False):
                 else:
                     size = os.path.getsize(file)
                     model_type = get_file_signature(file, local=local)
-                print(f"{Fore.GREEN}[+] Found possible ML Model: {file} ({human_readable_size(size)}) [Type: {model_type}]{Style.RESET_ALL}")
-                FOUND.add(file)
+                if model_type != "Unknown":
+                    print(f"{Fore.GREEN}[+] Found possible ML Model: {file} ({human_readable_size(size)}) [Type: {model_type}]{Style.RESET_ALL}")
+                    FOUND.add(file)
         elif any(file.lower().endswith(ext) for ext in APK_EXTENSIONS):
             extract_and_scan_apk(file, local = local)
 
@@ -218,7 +223,6 @@ def extract_and_scan_apk(apk_path, local = False):
         # Get the MD5 hash of the local APK (if it exists)
         local_md5 = calculate_md5(local_apk_path)
 
-
         if local_md5 and local_md5 == remote_md5:
             print(f"{Fore.YELLOW}[*] APK already exists in {TMPBASEDIR} with matching MD5. Skipping pull.{Style.RESET_ALL}")
         else:
@@ -226,6 +230,8 @@ def extract_and_scan_apk(apk_path, local = False):
             if not adb_pull(apk_path, local_apk_path):
                 print(f"{Fore.RED}[-] Failed to pull APK: {apk_path}{Style.RESET_ALL}")
                 return
+    else:
+        local_apk_path = apk_path
 
     print(f"{Fore.BLUE}[*] Extracting APK: remote: {apk_path} local: {local_apk_path} {Style.RESET_ALL}")  
   
@@ -234,7 +240,6 @@ def extract_and_scan_apk(apk_path, local = False):
     os.makedirs(extracted_dir, exist_ok=True)
     try:
         result = subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True)
- 
     except subprocess.CalledProcessError:
         print(f"{Fore.RED}[-] Failed to extract APK: {local_apk_path}{Style.RESET_ALL}")
         return
@@ -337,12 +342,12 @@ def main():
         # Print and copy files grouped by their MD5 hash
         for file_md5, files in md5_to_files_map.items():
             md5_model_dir = os.path.join(MODELSDIR, file_md5)
-            print(f"{Fore.BLUE} With MD5 {file_md5}:{Style.RESET_ALL}")
+            print(f"{Fore.BLUE} With MD5: {file_md5} and size: {human_readable_size(get_file_size(list(files)[0]))}{Style.RESET_ALL}")
             for ml_file in files:
                 # Copy the file to the MD5-specific directory
                 dst_file_basename = os.path.basename(ml_file)
                 dst_file_path = os.path.join(md5_model_dir, dst_file_basename)
-                os.system(f"cp '{ml_file}' '{dst_file_path}'")
+                os.system(f"cp -u --reflink '{ml_file}' '{dst_file_path}'")
                 print(f"   {Fore.CYAN} Found possible ML Model: [{ml_file}]. {Style.RESET_ALL}")
 
 if __name__ == "__main__":
