@@ -57,7 +57,7 @@ python AdbWeightHound.py --file /path/to/file
 ```
 
 ## License
-This project is licensed under the MIT License.
+This project is licensed under the GPLv3 License.
 
 ## Disclaimer
 This tool is for educational and research purposes only. Use it responsibly and ensure you have permission before scanning any device.
