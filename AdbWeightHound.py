@@ -18,6 +18,8 @@ ML_MODEL_EXTENSIONS = [
     ".weights", ".mlmodel", ".gguf", ".safetensors"
 ]
 APK_EXTENSIONS = [".apk",".xapk",".zip",".jar"]
+TMPBASEDIR = "./tmp"
+MODELSDIR = "./models_found" 
 
 FOUND = set()  # Set to store found files and avoid duplicates
 
@@ -199,9 +201,9 @@ def extract_and_scan_apk(apk_path, local = False):
     """
     print(f"{Fore.BLUE}[*] Processing APK: {apk_path}{Style.RESET_ALL}")
 
-    # Define the local path for the APK in /tmp/
+    # Define the local path for the APK in ./tmp/
     apk_name = os.path.basename(apk_path)
-    local_apk_path = os.path.join("/tmp", apk_name)
+    local_apk_path = os.path.join(TMPBASEDIR, apk_name)
 
     local_md5 = None
     remote_md5 = None
@@ -218,9 +220,9 @@ def extract_and_scan_apk(apk_path, local = False):
 
 
         if local_md5 and local_md5 == remote_md5:
-            print(f"{Fore.YELLOW}[*] APK already exists in /tmp/ with matching MD5. Skipping pull.{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}[*] APK already exists in {TMPBASEDIR} with matching MD5. Skipping pull.{Style.RESET_ALL}")
         else:
-            print(f"{Fore.BLUE}[*] Pulling APK to /tmp/...{Style.RESET_ALL}")
+            print(f"{Fore.BLUE}[*] Pulling APK to .{TMPBASEDIR}...{Style.RESET_ALL}")
             if not adb_pull(apk_path, local_apk_path):
                 print(f"{Fore.RED}[-] Failed to pull APK: {apk_path}{Style.RESET_ALL}")
                 return
@@ -228,12 +230,11 @@ def extract_and_scan_apk(apk_path, local = False):
     print(f"{Fore.BLUE}[*] Extracting APK: remote: {apk_path} local: {local_apk_path} {Style.RESET_ALL}")  
   
     # Extract the APK
-    extracted_dir = os.path.join("/tmp", "extracted", apk_name)
+    extracted_dir = os.path.join(TMPBASEDIR, "extracted", apk_name) + "/"
     os.makedirs(extracted_dir, exist_ok=True)
     try:
-        subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True)
-        #print(subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True))
-
+        result = subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True)
+ 
     except subprocess.CalledProcessError:
         print(f"{Fore.RED}[-] Failed to extract APK: {local_apk_path}{Style.RESET_ALL}")
         return
@@ -259,6 +260,22 @@ def find_ml_models():
             if any(file.lower().endswith(ext) for ext in ML_MODEL_EXTENSIONS + APK_EXTENSIONS):
                 scan_files([file])
 
+def scan_local_directory(directory):
+    """
+    Scan a local directory for APKs and ML models.
+
+    Args:
+        directory (str): The path to the local directory to scan.
+    """
+    print(f"{Fore.BLUE}[*] Scanning local directory: {directory}{Style.RESET_ALL}")
+    for root, _, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if any(file.lower().endswith(ext) for ext in APK_EXTENSIONS):
+                extract_and_scan_apk(file_path, local=True)
+            elif any(file.lower().endswith(ext) for ext in ML_MODEL_EXTENSIONS):
+                scan_files([file_path], local=True)
+
 def get_device_info():
     """
     Retrieve and print the Android device's serial number, model, and manufacturer.
@@ -281,28 +298,54 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Search for ML models on an Android device.")
     parser.add_argument("--file", type=str, help="Specify a single file to scan.")
+    parser.add_argument("--local-dir", type=str, help="Specify a local directory to scan for APKs and ML models.")
     args = parser.parse_args()
-
-    get_device_info()
+  
+    os.makedirs(TMPBASEDIR, exist_ok=True)    
 
     if args.file:
         # If a file is specified, scan only that file
         scan_files([args.file])
+    elif args.local_dir:
+        # If a local directory is specified, scan it for APKs and ML models
+        scan_local_directory(args.local_dir)
     else:
         # Otherwise, search for ML models in predefined directories
+        get_device_info()
         find_ml_models()
 
-    
     if len(FOUND) > 0:
+        os.makedirs(MODELSDIR, exist_ok=True)
         print(f"\n{Fore.BLUE}[*] Summary:{Style.RESET_ALL}")
-        D = dict()
-        for mlfile in FOUND:
-            md5 = calculate_md5(mlfile)   
-            if md5 not in D: D[md5] = set()
-            D[md5].add(mlfile)
-        for md5 in D.keys():
-            for mlfile in D[md5]:
-                print(f"   {Fore.CYAN} Found possible ML Model: [{mlfile}]. {Style.RESET_ALL}")
+        
+        # Dictionary to group files by their MD5 hash
+        md5_to_files_map = dict()
+        
+        for ml_file in FOUND:
+            # Calculate the MD5 hash of the file
+            file_md5 = calculate_md5(ml_file)
+            
+            # Create a directory for this MD5 hash if it doesn't exist
+            md5_model_dir = os.path.join(MODELSDIR, file_md5)
+            os.makedirs(md5_model_dir, exist_ok=True)
+            
+            # Add the file to the dictionary under its MD5 hash
+            if file_md5 not in md5_to_files_map:
+                md5_to_files_map[file_md5] = set()
+            md5_to_files_map[file_md5].add(ml_file)
+        
+        # Print and copy files grouped by their MD5 hash
+        for file_md5, files in md5_to_files_map.items():
+            md5_model_dir = os.path.join(MODELSDIR, file_md5)
+            print(f"{Fore.BLUE} With MD5 {file_md5}:{Style.RESET_ALL}")
+            for ml_file in files:
+                # Copy the file to the MD5-specific directory
+                dst_file_basename = os.path.basename(ml_file)
+                dst_file_path = os.path.join(md5_model_dir, dst_file_basename)
+                os.system(f"cp '{ml_file}' '{dst_file_path}'")
+                print(f"   {Fore.CYAN} Found possible ML Model: [{ml_file}]. {Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
+    
+
