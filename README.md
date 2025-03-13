@@ -32,12 +32,25 @@ AdbWeightHound is a Python script designed to search for machine learning model 
 ## Usage
 Run the script to scan for ML models on a connected device:
 ```bash
-python AdbWeightHound.py
+$ python AdbWeightHound.py
+usage: AdbWeightHound.py [-h] [--file FILE] [--local-dir LOCAL_DIR] [--export-csv EXPORT_CSV] [--cleanup]
+
+Search for ML models on an Android device.
+
+options:
+  -h, --help            show this help message and exit
+  --file FILE           Specify a single file to scan.
+  --local-dir LOCAL_DIR
+                        Specify a local directory to scan for APKs and ML models.
+  --export-csv EXPORT_CSV
+                        Specify a filename to export the summary to CSV.
+  --cleanup             Clean up the tmp/ directory after execution.
+
 ```
 
 To scan a specific file:
 ```bash
-python AdbWeightHound.py --file /path/to/file
+$ python AdbWeightHound.py --file /path/to/file
 ```
 
 ## How It Works
