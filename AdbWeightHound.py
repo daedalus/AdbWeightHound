@@ -2,12 +2,14 @@
 # Author Dario Clavijo 2025
 # License GPLv3.
 
+import sys
 import subprocess
 import os
 import tempfile
 import hashlib
-from colorama import Fore, Style, init
 import argparse  # Import the argparse module
+import csv
+from colorama import Fore, Style, init
 
 # Initialize colorama
 init(autoreset=True)
@@ -47,8 +49,42 @@ ML_MODEL_SIGNATURES = {
     b"{\n  \"metadata\": {": "SafeTensors"  # JSON-like header
 }
 
+def is_cow_filesystem(path='/'):
+    """
+    Checks if the filesystem at the given path is a Copy-On-Write (COW) filesystem.
+    
+    Args:
+    path (str): The directory path to check, default is the root directory.
+    
+    Returns:
+    bool: True if the filesystem is a COW filesystem, False otherwise.
+    """
+    # Check if we are running on Linux
+    if os.name != 'posix':
+        raise EnvironmentError("This function is designed for Linux-based systems.")
+    
+    # Open the /proc/mounts file to get the mounted filesystems
+    with open('/proc/mounts', 'r') as f:
+        mounts = f.readlines()
+
+    # Iterate through the mounted filesystems
+    for mount in mounts:
+        # Each line is in the format: device mount_point fs_type options
+        device, mount_point, fs_type, *options = mount.split()
+
+        # Check if the filesystem type is a COW filesystem (e.g., Btrfs, ZFS)
+        if fs_type in ['btrfs', 'zfs', 'overlay', 'xfs']:
+            # Check if the path is within the mount point of a COW filesystem
+            if path.startswith(mount_point):
+                return True
+    
+    return False
+
 def local_shell(command):
-    return subprocess.check_output(command, stderr=subprocess.DEVNULL, universal_newlines=True)
+    try:
+        return subprocess.check_output(command, stderr=subprocess.DEVNULL, universal_newlines=True)
+    except:
+        return False
 
 def adb_shell(command):
     """
@@ -297,6 +333,29 @@ def get_device_info():
     print(f"    {Fore.CYAN}Model: {model if model else 'Unknown'}{Style.RESET_ALL}")
     print(f"    {Fore.CYAN}Manufacturer: {manufacturer if manufacturer else 'Unknown'}{Style.RESET_ALL}\n")
 
+def export_summary_to_csv(summary_data, csv_filename="summary.csv"):
+    """
+    Export the summary of found ML models to a CSV file.
+    
+    Args:
+        summary_data (list of dict): A list of dictionaries containing model details.
+        csv_filename (str): The name of the CSV file to export the data.
+    """
+    fieldnames = ["MD5", "Size", "File Path", "Dst File Path"]
+    
+    with open(csv_filename, mode='w', newline='') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(summary_data)
+
+    print(f"{Fore.BLUE}[*] Summary exported to {csv_filename}{Style.RESET_ALL}")
+
+def local_cp(src,dst, is_cow=True):
+    if is_cow: 
+        local_shell(["cp","-u","--reflink", src, dst])
+    else:
+        local_shell(["cp","-u", src, dst])
+
 def main():
     """
     Main entry point of the script. Retrieves device information and searches for ML models.
@@ -304,18 +363,18 @@ def main():
     parser = argparse.ArgumentParser(description="Search for ML models on an Android device.")
     parser.add_argument("--file", type=str, help="Specify a single file to scan.")
     parser.add_argument("--local-dir", type=str, help="Specify a local directory to scan for APKs and ML models.")
+    parser.add_argument("--export-csv", type=str, help="Specify a filename to export the summary to CSV.")
     args = parser.parse_args()
-  
+
+    is_cow = is_cow_filesystem(os.getcwd())
+
     os.makedirs(TMPBASEDIR, exist_ok=True)    
 
     if args.file:
-        # If a file is specified, scan only that file
         scan_files([args.file])
     elif args.local_dir:
-        # If a local directory is specified, scan it for APKs and ML models
         scan_local_directory(args.local_dir)
     else:
-        # Otherwise, search for ML models in predefined directories
         get_device_info()
         find_ml_models()
 
@@ -323,32 +382,37 @@ def main():
         os.makedirs(MODELSDIR, exist_ok=True)
         print(f"\n{Fore.BLUE}[*] Summary:{Style.RESET_ALL}")
         
-        # Dictionary to group files by their MD5 hash
         md5_to_files_map = dict()
+        summary_data = []
         
         for ml_file in FOUND:
-            # Calculate the MD5 hash of the file
             file_md5 = calculate_md5(ml_file)
-            
-            # Create a directory for this MD5 hash if it doesn't exist
             md5_model_dir = os.path.join(MODELSDIR, file_md5)
             os.makedirs(md5_model_dir, exist_ok=True)
             
-            # Add the file to the dictionary under its MD5 hash
             if file_md5 not in md5_to_files_map:
                 md5_to_files_map[file_md5] = set()
             md5_to_files_map[file_md5].add(ml_file)
         
-        # Print and copy files grouped by their MD5 hash
         for file_md5, files in md5_to_files_map.items():
+            files = list(files)
             md5_model_dir = os.path.join(MODELSDIR, file_md5)
-            print(f"{Fore.BLUE} With MD5: {file_md5} and size: {human_readable_size(get_file_size(list(files)[0]))}{Style.RESET_ALL}")
+            ext = os.path.basename(files[0]).split(".")[-1]
+            HRS = human_readable_size(get_file_size(files[0]))          
+            print(f"{Fore.BLUE} With MD5: {file_md5} and size: {HRS}{Style.RESET_ALL}")
+            model = os.path.join(md5_model_dir,"model." + ext)
+    
+            local_cp(files[0], model, is_cow)
+
             for ml_file in files:
-                # Copy the file to the MD5-specific directory
                 dst_file_basename = os.path.basename(ml_file)
                 dst_file_path = os.path.join(md5_model_dir, dst_file_basename)
-                os.system(f"cp -u --reflink '{ml_file}' '{dst_file_path}'")
+                local_cp(ml_file, dst_file_path, is_cow)
+                summary_data.append({"MD5": file_md5, "Size": HRS, "File Path": ml_file, "dst_file_path": dst_file_path})
                 print(f"   {Fore.CYAN} Found possible ML Model: [{ml_file}]. {Style.RESET_ALL}")
+        
+        if args.export_csv:
+            export_summary_to_csv(summary_data, args.export_csv)
 
 if __name__ == "__main__":
     main()
