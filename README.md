@@ -4,17 +4,18 @@ AdbWeightHound is a Python script designed to search for machine learning model 
 
 ## Features
 - Scans Android devices for ML model files.
-- Supports various model file formats, including `.tflite`, `.onnx`, `.pt`, `.pb`, `.h5`, and more.
+- Supports various model file formats, including .tflite, .onnx, .pt, .pb, .h5, and more.
 - Detects files based on extensions and magic byte signatures.
 - Extracts APK files and searches for embedded ML models.
 - Provides device information such as serial number, model, and manufacturer.
 - Displays file size in a human-readable format.
 - Supports local file scanning as well.
+- Cleanup functionality: Optionally cleans up the tmp/ directory after execution.
 
 ## Prerequisites
 - Python 3.x
 - ADB (Android Debug Bridge) installed and added to system PATH.
-- Required Python modules: `colorama`, `argparse`.
+- Required Python modules: colorama, argparse.
 - A connected Android device with ADB debugging enabled.
 
 ## Installation
@@ -44,6 +45,7 @@ python AdbWeightHound.py --file /path/to/file
 2. It searches predefined directories for known ML model file extensions.
 3. If an APK file is found, it is extracted and scanned for embedded models.
 4. Found models are displayed with their file size and detected format.
+5. If the --cleanup flag is provided, the tmp/ directory is cleaned up after execution.
 
 ## Example Output
 ```
