@@ -2,6 +2,7 @@
 # Author Dario Clavijo 2025
 # License GPLv3.
 
+import shutil
 import sys
 import subprocess
 import os
@@ -356,6 +357,25 @@ def local_cp(src,dst, is_cow=True):
     else:
         local_shell(["cp","-u", src, dst])
 
+def cleanup_tmp_directory():
+    """
+    Clean up the tmp/ directory by removing all files and subdirectories.
+    """
+    tmp_dir = TMPBASEDIR
+    if os.path.exists(tmp_dir):
+        print(f"{Fore.BLUE}[*] Cleaning up {tmp_dir}...{Style.RESET_ALL}")
+        for item in os.listdir(tmp_dir):
+            item_path = os.path.join(tmp_dir, item)
+            try:
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+            except Exception as e:
+                print(f"{Fore.RED}[-] Failed to delete {item_path}. Reason: {e}{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.YELLOW}[*] {tmp_dir} does not exist. No cleanup needed.{Style.RESET_ALL}")
+
 def main():
     """
     Main entry point of the script. Retrieves device information and searches for ML models.
@@ -364,6 +384,7 @@ def main():
     parser.add_argument("--file", type=str, help="Specify a single file to scan.")
     parser.add_argument("--local-dir", type=str, help="Specify a local directory to scan for APKs and ML models.")
     parser.add_argument("--export-csv", type=str, help="Specify a filename to export the summary to CSV.")
+    parser.add_argument("--cleanup", action="store_true", help="Clean up the tmp/ directory after execution.")
     args = parser.parse_args()
 
     is_cow = is_cow_filesystem(os.getcwd())
@@ -414,7 +435,10 @@ def main():
         if args.export_csv:
             export_summary_to_csv(summary_data, args.export_csv)
 
+    # Clean up the tmp/ directory
+    if args.cleanup:
+        cleanup_tmp_directory()
+
 if __name__ == "__main__":
     main()
-    
 
