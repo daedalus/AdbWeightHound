@@ -286,6 +286,7 @@ def extract_and_scan_apk(apk_path, local = False):
         for file in files:
             file_path = os.path.join(root, file)
             scan_files([file_path], local=True)
+    shutil.rmtree(extracted_dir)
 
 def find_ml_models():
     """
