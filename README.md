@@ -1,6 +1,6 @@
-# AdbWeightHound
+# TBC
 
-AdbWeightHound is a Python script designed to search for machine learning model weight files on an Android device via ADB. It scans common directories for known ML model file extensions and signatures and can also extract APK files to analyze their contents.
+The brain collector is a Python script designed to search for machine learning model weight files on an Android device via ADB. It scans common directories for known ML model file extensions and signatures and can also extract APK files to analyze their contents.
 
 ## Features
 - Scans Android devices for ML model files.
@@ -72,7 +72,7 @@ $ python AdbWeightHound.py --file /path/to/file
 ```
 
 ## License
-This project is licensed under the GPLv3 License.
+This project is licensed under the MIT License.
 
 ## Disclaimer
 This tool is for educational and research purposes only. Use it responsibly and ensure you have permission before scanning any device.
