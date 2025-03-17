@@ -1,6 +1,6 @@
 # TBC
 
-The brain collector is a Python script designed to search for machine learning model weight files on an Android device via ADB. It scans common directories for known ML model file extensions and signatures and can also extract APK files to analyze their contents.
+The Brain Collector: is a Python script designed to search for machine learning model weight files on an Android device via ADB. It scans common directories for known ML model file extensions and signatures and can also extract APK files to analyze their contents.
 
 ## Features
 - Scans Android devices for ML model files.
