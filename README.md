@@ -32,8 +32,8 @@ The brain collector is a Python script designed to search for machine learning m
 ## Usage
 Run the script to scan for ML models on a connected device:
 ```bash
-$ python AdbWeightHound.py
-usage: AdbWeightHound.py [-h] [--file FILE] [--local-dir LOCAL_DIR] [--export-csv EXPORT_CSV] [--cleanup]
+$ python TBC.py
+usage: TBC.py [-h] [--file FILE] [--local-dir LOCAL_DIR] [--export-csv EXPORT_CSV] [--cleanup]
 
 Search for ML models on an Android device.
 
@@ -50,7 +50,7 @@ options:
 
 To scan a specific file:
 ```bash
-$ python AdbWeightHound.py --file /path/to/file
+$ python TBC.py --file /path/to/file
 ```
 
 ## How It Works
