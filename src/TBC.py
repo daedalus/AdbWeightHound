@@ -17,7 +17,7 @@ init(autoreset=True)
 
 # Updated ML model weight file extensions
 ML_MODEL_EXTENSIONS = [
-    ".tflite", ".onnx", ".pt", ".pth", ".pb", ".h5",".hdf5", ".caffemodel",
+    ".lite",".tflite", ".onnx", ".pt", ".pth", ".pb", ".h5",".hdf5", ".caffemodel",
     ".weights", ".mlmodel", ".gguf", ".safetensors"
 ]
 APK_EXTENSIONS = [".apk"]
@@ -27,6 +27,7 @@ TMPBASEDIR = "./tmp"
 MODELSDIR = "./models_found" 
 
 FOUND = set()  # Set to store found files and avoid duplicates
+FAILED = set()
 
 # Common Android directories to search
 SEARCH_PATHS = [
@@ -36,6 +37,7 @@ SEARCH_PATHS = [
 
 # Known ML model file signatures (magic bytes)
 ML_MODEL_SIGNATURES = {
+    b"\x14\x00\x00\x00TFL3": "TFlite",
     b" \x00\x00\x00TFL3": "TFlite",
     b"\x1c\x00\x00\x00TFL3": "TFlite",
     b"\x18\x00\x00\x00TFL3": "TFlite",
@@ -279,6 +281,7 @@ def extract_and_scan_apk(apk_path, local = False):
         result = subprocess.check_output(["unzip", "-u", local_apk_path, "-d", extracted_dir], stderr=subprocess.DEVNULL, universal_newlines=True)
     except subprocess.CalledProcessError:
         print(f"{Fore.RED}[-] Failed to extract APK: {local_apk_path}{Style.RESET_ALL}")
+        FAILED.add(apk_path)
         return
 
     # Scan the extracted files
@@ -286,7 +289,7 @@ def extract_and_scan_apk(apk_path, local = False):
         for file in files:
             file_path = os.path.join(root, file)
             scan_files([file_path], local=True)
-    shutil.rmtree(extracted_dir)
+
 
 def find_ml_models():
     """
@@ -360,22 +363,11 @@ def local_cp(src,dst, is_cow=True):
 
 def cleanup_tmp_directory():
     """
-    Clean up the tmp/ directory by removing all files and subdirectories.
+    Clean up the tmp/extacted directory by removing all files and subdirectories.
     """
-    tmp_dir = TMPBASEDIR
-    if os.path.exists(tmp_dir):
-        print(f"{Fore.BLUE}[*] Cleaning up {tmp_dir}...{Style.RESET_ALL}")
-        for item in os.listdir(tmp_dir):
-            item_path = os.path.join(tmp_dir, item)
-            try:
-                if os.path.isfile(item_path) or os.path.islink(item_path):
-                    os.unlink(item_path)
-                elif os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-            except Exception as e:
-                print(f"{Fore.RED}[-] Failed to delete {item_path}. Reason: {e}{Style.RESET_ALL}")
-    else:
-        print(f"{Fore.YELLOW}[*] {tmp_dir} does not exist. No cleanup needed.{Style.RESET_ALL}")
+    path = os.path.join(TMPBASEDIR, "extracted")
+    shutil.rmtree(path)
+    print(f"{Fore.YELLOW}[*] {path} does not exist. No cleanup needed.{Style.RESET_ALL}")
 
 def main():
     """
@@ -384,7 +376,7 @@ def main():
     parser = argparse.ArgumentParser(description="Search for ML models on an Android device.")
     parser.add_argument("--file", type=str, help="Specify a single file to scan.")
     parser.add_argument("--local-dir", type=str, help="Specify a local directory to scan for APKs and ML models.")
-    parser.add_argument("--export-csv", type=str, help="Specify a filename to export the summary to CSV.")
+    parser.add_argument("--no-export-csv", type=str, help="Specify a filename to export the summary to CSV.")
     parser.add_argument("--cleanup", action="store_true", help="Clean up the tmp/ directory after execution.")
     args = parser.parse_args()
 
@@ -430,11 +422,15 @@ def main():
                 dst_file_basename = os.path.basename(ml_file)
                 dst_file_path = os.path.join(md5_model_dir, dst_file_basename)
                 local_cp(ml_file, dst_file_path, is_cow)
-                summary_data.append({"MD5": file_md5, "Size": HRS, "File Path": ml_file, "dst_file_path": dst_file_path})
+                summary_data.append({"MD5": file_md5, "Size": HRS, "File Path": ml_file, "Dst File Path": dst_file_path})
                 print(f"   {Fore.CYAN} Found possible ML Model: [{ml_file}]. {Style.RESET_ALL}")
         
-        if args.export_csv:
-            export_summary_to_csv(summary_data, args.export_csv)
+        print(f"{Fore.YELLOW}[-] Summary of failed APKs: {Style.RESET_ALL}")
+        for file in FAILED:
+            print(f"   {Fore.RED} Failed APK: [{file}]. {Style.RESET_ALL}")
+  
+        if not args.no_export_csv:
+            export_summary_to_csv(summary_data, "model_report.csv")
 
     # Clean up the tmp/ directory
     if args.cleanup:
